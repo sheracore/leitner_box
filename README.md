@@ -17,7 +17,7 @@ postgres=# \q
 ```angular2html
  python main migrate
 ```
-### Run this, after each change in models do the following steps 
+### After each change in models do the following steps 
 ```angular2html
 alembic revision -m "[Change a filed of leitner]"
 alembic upgrade head
