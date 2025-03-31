@@ -1,15 +1,17 @@
 import os
+
 import dotenv
 
 dotenv.load_dotenv()
 os.environ['http_proxy'] = 'http://127.0.0.1:2081'
 os.environ['https_proxy'] = 'http://127.0.0.1:2081'
 
-from telegram import Update
-from telegram.ext import (Application, CommandHandler, ConversationHandler, MessageHandler, CallbackQueryHandler,
-                          filters, CallbackContext)
-from config.config import Config
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import (Application, CallbackContext, CallbackQueryHandler,
+                          CommandHandler, ConversationHandler, MessageHandler,
+                          filters)
+
+from telegram_bot.config.config import Config
 
 # Define states
 RP, START, PD, SAVE = range(4)
@@ -65,7 +67,7 @@ async def cancel(update: Update, context: CallbackContext) -> int:
     return ConversationHandler.END
 
 
-def main():
+def run():
     app = (
         Application.builder()
         .token(Config.TELEGRAM_TOKEN)
@@ -87,8 +89,3 @@ def main():
 
     app.run_polling()
 
-
-if __name__ == "__main__":
-    dotenv.load_dotenv()
-
-    main()
