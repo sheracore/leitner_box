@@ -7,7 +7,7 @@ load_dotenv()
 
 class Config:
     TELEGRAM_TOKEN: str = os.getenv('TOKEN')
-    DATABASE_URL: str = "postgresql://user:password@localhost:5432/dbname"
+    DATABASE_URL: str = os.getenv('DATABASE_URL')
     DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 

@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 
-from .Base import Base
+from .base import Base
 
 class Course(Base):
     __tablename__ = "courses"

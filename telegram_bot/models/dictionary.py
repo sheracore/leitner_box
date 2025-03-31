@@ -3,7 +3,7 @@ import sqlalchemy
 from sqlalchemy import Column, String, Integer
 from sqlalchemy.orm import relationship
 
-from .Base import Base
+from .base import Base
 
 class Dictionary(Base):
     __tablename__ = "dictionaries"

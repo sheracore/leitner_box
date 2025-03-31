@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship
-from .Base import Base
+from .base import Base
 
 
 class Section(Base):
