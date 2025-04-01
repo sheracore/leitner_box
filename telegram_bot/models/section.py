@@ -1,12 +1,14 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
-from .base import Base
 
+from .base import Base
 
 class Section(Base):
     __tablename__ = "sections"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=False)
+    course_id = Column(Integer, ForeignKey("courses.id"), nullable=False)
 
-    courses = relationship("Course", back_populates="section")
+    course = relationship("Course", back_populates="sections")
+    dictionaries = relationship("SectionDictionary", back_populates="section")

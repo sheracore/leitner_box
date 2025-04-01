@@ -13,7 +13,7 @@ class Dictionary(Base):
     word = Column(String, nullable=False)
     meaning = Column(String, nullable=False)
 
-    courses = relationship("CourseDictionary", back_populates="dictionary")
+    sections = relationship("SectionDictionary", back_populates="dictionary")
     leitner = relationship("Leitner", back_populates="dictionary")
 
     __table_args__ = (

@@ -30,7 +30,7 @@ def leitner_conversation(leitner_handler: LeitnerHandler):
             ConversationState.CHOOSE_SERVICE.value: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, leitner_handler.choose_service)],
             ConversationState.CHOOSE_SECTION.value: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, leitner_handler.choose_section)],
+                MessageHandler(filters.TEXT & ~filters.COMMAND, leitner_handler.choose_course)],
 
             # PD: [MessageHandler(filters.TEXT & ~filters.COMMAND, pd)],
             # SAVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, save)],

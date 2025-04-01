@@ -1,9 +1,15 @@
+import logging
+
 from enum import Enum
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram_bot.config.config import ConversationState, Config
 from telegram_bot.core.db import Database
-from telegram_bot.models.section import Section
+from telegram_bot.models.course import Course
+
+# Set up logging to monitor database connection issues
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class AdminServices(Enum):
@@ -48,25 +54,26 @@ class LeitnerHandler:
             try:
                 db = Database.get_db()
                 session = next(db)
-                sections = session.query(Section.name).all()
+                courses = session.query(Course.name).all()
 
-                sections = [[name[0]] for name in sections]
-                reply_markup = ReplyKeyboardMarkup(sections,
+                courses = [[name[0]] for name in courses]
+                reply_markup = ReplyKeyboardMarkup(courses,
                                                    resize_keyboard=True,
                                                    one_time_keyboard=True)
 
                 await update.message.reply_text("Select between Course names of input new Course",
                                                 reply_markup=reply_markup)
             except Exception as e:
+                logger.error(e)
                 await update.message.reply_text(f"Error: {str(e)}")
 
-    async def choose_section(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    async def choose_course(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         db = Database.get_db()
         session = next(db)
         try:
-            sections = session.query(Section).all()
-            section_list = "\n".join([f"ID: {section.id}, Name: {section.name}" for section in sections])
-            await update.message.reply_text(f"Sections:\n{section_list}")
+            courses = session.query(Course).all()
+            course_list = "\n".join([f"ID: {course.id}, Name: {course.name}" for course in courses])
+            await update.message.reply_text(f"Sections:\n{course_list}")
         except Exception as e:
             await update.message.reply_text(f"Error: {str(e)}")
 
