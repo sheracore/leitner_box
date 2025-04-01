@@ -31,5 +31,6 @@ class Database:
         finally:
             if db:
                 db.close()
+                print("Database connection closed")
                 logger.info("Database session closed.")
 
