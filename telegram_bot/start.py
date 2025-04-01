@@ -1,6 +1,8 @@
 import os
-
 import dotenv
+
+from telegram_bot.handlers.leitner_handler import LeitnerHandler
+from telegram_bot.config.config import ConversationState
 
 dotenv.load_dotenv()
 os.environ['http_proxy'] = 'http://127.0.0.1:2081'
@@ -17,17 +19,25 @@ from telegram_bot.config.config import Config
 RP, START, PD, SAVE = range(4)
 
 
-def leitner_conversation():
+def leitner_conversation(leitner_handler: LeitnerHandler):
     return ConversationHandler(
         entry_points=[CommandHandler('start', start),
-                      CommandHandler('help', help_command)],
+                      CommandHandler('help', help_command),
+                      CommandHandler('admin', leitner_handler.admin),
+                      ],
         states={
-            RP: [MessageHandler(filters.TEXT & ~filters.COMMAND, rp)],
-            PD: [MessageHandler(filters.TEXT & ~filters.COMMAND, pd)],
-            SAVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, save)],
+
+            ConversationState.CHOOSE_SERVICE.value: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, leitner_handler.choose_service)],
+            ConversationState.CHOOSE_SECTION.value: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, leitner_handler.choose_section)],
+
+            # PD: [MessageHandler(filters.TEXT & ~filters.COMMAND, pd)],
+            # SAVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, save)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
+
 
 async def rp(update: Update, context: CallbackContext):
     new_word = update.message.text
@@ -40,6 +50,7 @@ async def rp(update: Update, context: CallbackContext):
         context.user_data['word'] = [new_word]
     await update.message.reply_text("Insert new word or type `skip`")
     return RP
+
 
 async def start(update, context):
     await update.message.reply_text("please inter your data")
@@ -56,10 +67,12 @@ async def pd(update, context):
     await update.message.reply_text("inter save data location")
     return SAVE
 
+
 async def save(update, context):
     saving_data = update.message.text
     context.user_data['save'] = saving_data
-    await update.message.reply_text(f"saving data in {context.user_data['save']} with data: {context.user_data['pd']}, {context.user_data['word']}")
+    await update.message.reply_text(
+        f"saving data in {context.user_data['save']} with data: {context.user_data['pd']}, {context.user_data['word']}")
 
 
 async def cancel(update: Update, context: CallbackContext) -> int:
@@ -85,7 +98,7 @@ def run():
         .build()
     )
 
-    app.add_handler(leitner_conversation())
+    leitner_handler = LeitnerHandler()
+    app.add_handler(leitner_conversation(leitner_handler))
 
     app.run_polling()
-
