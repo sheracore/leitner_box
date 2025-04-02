@@ -16,8 +16,9 @@ class Config:
 class ConversationState(Enum):
     ADMIN = auto()
     CHOOSE_SERVICE = auto()
-    CHOOSE_SECTION = auto()
-    ADD_COURSE = auto()
+    PREPARE_SECTION = auto()
+    ADD_SECTION = auto()
+    CHOOSE_COURSE = auto()
     BLOCKCHAIN_URL = auto()
     CURRENCY = auto()
     NETWORK = auto()

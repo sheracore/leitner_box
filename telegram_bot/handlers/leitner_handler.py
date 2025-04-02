@@ -1,11 +1,13 @@
 import logging
 
 from enum import Enum
+
+from requests import session
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram_bot.config.config import ConversationState, Config
 from telegram_bot.core.db import Database
-from telegram_bot.models.course import Course
+from telegram_bot.models import Course, Section
 
 # Set up logging to monitor database connection issues
 logging.basicConfig(level=logging.INFO)
@@ -38,24 +40,10 @@ class LeitnerHandler:
 
     async def choose_service(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         if update.message.text == AdminServices.ADD_COURSE.value:
-            # # -------------------------------------------------
-            # keyboard = [
-            #     [
-            #         InlineKeyboardButton("Option 1", callback_data="option1"),
-            #         InlineKeyboardButton("Option 2", callback_data="option2"),
-            #     ]
-            # ]
-            # reply_markup = InlineKeyboardMarkup(keyboard)
-            #
-            # # Send a message with the Inline Keyboard
-            # await update.message.reply_text("Choose an option:", reply_markup=reply_markup)
-            # # -------------------------------------------------
-
             try:
                 db = Database.get_db()
                 session = next(db)
                 courses = session.query(Course.name).all()
-
                 courses = [[name[0]] for name in courses]
                 reply_markup = ReplyKeyboardMarkup(courses,
                                                    resize_keyboard=True,
@@ -63,22 +51,61 @@ class LeitnerHandler:
 
                 await update.message.reply_text("Select between Course names of input new Course",
                                                 reply_markup=reply_markup)
+                return ConversationState.PREPARE_SECTION.value
             except Exception as e:
                 logger.error(e)
                 await update.message.reply_text(f"Error: {str(e)}")
 
-    async def choose_course(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        db = Database.get_db()
-        session = next(db)
+        return ConversationHandler.END
+
+    async def prepare_section(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         try:
-            courses = session.query(Course).all()
-            course_list = "\n".join([f"ID: {course.id}, Name: {course.name}" for course in courses])
-            await update.message.reply_text(f"Sections:\n{course_list}")
+            db = Database.get_db()
+            session = next(db)
+
+            course = update.message.text
+            course_obj = session.query(Course).filter_by(name=course).first()
+            if not course_obj:
+                course_obj = Course(name=course)
+                session.add(course_obj)
+                session.commit()
+
+            context.user_data['course_obj'] = course_obj
+            sections = session.query(Course.sections).filter_by(name=course_obj.name).all()
+            sections = [[name[0]] for name in sections]
+            if not sections:
+                await update.message.reply_text("Insert a new section name", reply_markup=ReplyKeyboardRemove())
+                return ConversationState.ADD_SECTION.value
+
+            reply_markup = ReplyKeyboardMarkup(
+                sections,
+                one_time_keyboard=True,
+                resize_keyboard=True)
+
+            await update.message.reply_text(
+                "Insert a new section name or choose from the section list below to replace it.",
+            reply_markup=reply_markup)
+
+            return ConversationState.ADD_SECTION.value
+
         except Exception as e:
+            logger.error(e)
             await update.message.reply_text(f"Error: {str(e)}")
 
-        await update.message.reply_text("Keyboard removed!", reply_markup=ReplyKeyboardRemove())
+    async def add_section(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        try:
+            db = Database.get_db()
+            session = next(db)
 
-        return ConversationState.ADD_COURSE.value
-        # await update.message.reply_text("Please enter the section name of choose between these sections",
-        #                                 reply_markup=)
+            section_name = update.message.text
+            course_obj = context.user_data['course_obj']
+            section = session.query(Section).filter_by(name=section_name, course_id=course_obj.id).first()
+            if not section:
+                section = Section(name=section_name, course_id=course_obj.id)
+                session.add(section)
+                session.commit()
+
+
+        except Exception as e:
+            logger.error(e)
+            await update.message.reply_text(f"Error: {str(e)}")
