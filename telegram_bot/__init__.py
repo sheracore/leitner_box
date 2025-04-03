@@ -1,1 +1,1 @@
-from .models import Section, Course, Dictionary, SectionDictionary, Leitner
+from .models import Section, Course, Dictionary, SectionDictionary, Leitner, User

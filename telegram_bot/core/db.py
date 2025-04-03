@@ -16,8 +16,12 @@ Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 class Database:
     @classmethod
     def migrate(cls):
-        Base.metadata.create_all(bind=engine)
-        print("Migrate Done!")
+        try:
+            Base.metadata.create_all(bind=engine)
+            print("Migrate Done!")
+        except Exception as e:
+            logger.error(e)
+            raise Exception("Migrate failed!")
 
     @classmethod
     def get_db(cls):

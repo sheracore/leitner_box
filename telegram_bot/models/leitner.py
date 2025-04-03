@@ -20,6 +20,8 @@ class Leitner(Base):
     id = Column(Integer, primary_key=True, index=True)
     dictionary_id = Column(Integer, ForeignKey("dictionaries.id"), nullable=False)
     state = Column(Enum(StateEnum), default=StateEnum.BOX1, nullable=False)
-    telegram_user_id = Column(String, nullable=False)
+    user_id = Column(String, ForeignKey("users.telegram_user_id"), nullable=False)
     review_datetime = Column(DateTime, default=sqlalchemy.func.now(), nullable=False)
+
     dictionary = relationship("Dictionary", back_populates="leitner")
+    user = relationship("User", back_populates="leitner_entries")

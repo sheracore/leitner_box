@@ -1,8 +1,8 @@
-"""Init models
+"""init
 
-Revision ID: e7732f2a1db1
+Revision ID: e32987ac3af9
 Revises: 
-Create Date: 2025-04-01 20:26:35.624517
+Create Date: 2025-04-03 15:37:50.688905
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'e7732f2a1db1'
+revision: str = 'e32987ac3af9'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -37,13 +37,20 @@ def upgrade() -> None:
     sa.UniqueConstraint('language', 'word', name='uix_language_word')
     )
     op.create_index(op.f('ix_dictionaries_id'), 'dictionaries', ['id'], unique=False)
+    op.create_table('users',
+    sa.Column('telegram_user_id', sa.String(), nullable=False),
+    sa.Column('name', sa.String(), nullable=True),
+    sa.PrimaryKeyConstraint('telegram_user_id')
+    )
+    op.create_index(op.f('ix_users_telegram_user_id'), 'users', ['telegram_user_id'], unique=False)
     op.create_table('leitner',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('dictionary_id', sa.Integer(), nullable=False),
     sa.Column('state', sa.Enum('BOX1', 'BOX2', 'BOX3', 'BOX4', 'BOX5', name='stateenum'), nullable=False),
-    sa.Column('telegram_user_id', sa.String(), nullable=False),
+    sa.Column('user_id', sa.String(), nullable=False),
     sa.Column('review_datetime', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['dictionary_id'], ['dictionaries.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.telegram_user_id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_leitner_id'), 'leitner', ['id'], unique=False)
@@ -51,6 +58,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(), nullable=False),
     sa.Column('course_id', sa.Integer(), nullable=False),
+    sa.Column('dictionary_file_path', sa.String(), nullable=True),
     sa.ForeignKeyConstraint(['course_id'], ['courses.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -76,6 +84,8 @@ def downgrade() -> None:
     op.drop_table('sections')
     op.drop_index(op.f('ix_leitner_id'), table_name='leitner')
     op.drop_table('leitner')
+    op.drop_index(op.f('ix_users_telegram_user_id'), table_name='users')
+    op.drop_table('users')
     op.drop_index(op.f('ix_dictionaries_id'), table_name='dictionaries')
     op.drop_table('dictionaries')
     op.drop_index(op.f('ix_courses_id'), table_name='courses')

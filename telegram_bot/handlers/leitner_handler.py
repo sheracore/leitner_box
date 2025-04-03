@@ -49,7 +49,7 @@ class LeitnerHandler:
                                                    resize_keyboard=True,
                                                    one_time_keyboard=True)
 
-                await update.message.reply_text("Select between Course names of input new Course",
+                await update.message.reply_text("Select between Course names or insert new Course name",
                                                 reply_markup=reply_markup)
                 return ConversationState.PREPARE_SECTION.value
             except Exception as e:
@@ -83,7 +83,7 @@ class LeitnerHandler:
                 resize_keyboard=True)
 
             await update.message.reply_text(
-                "Insert a new section name or choose from the section list below to replace it.",
+                "Insert a new section name or choose from the section list below to edit it.",
             reply_markup=reply_markup)
 
             return ConversationState.ADD_SECTION.value
