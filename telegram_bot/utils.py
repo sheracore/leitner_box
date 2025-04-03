@@ -13,7 +13,8 @@ def save_file(file_content: bytes, original_filename: str) -> str:
     """
     # Generate a unique filename using UUID
     file_extension = original_filename.rsplit('.', 1)[-1] if '.' in original_filename else ''
-    unique_filename = f"{uuid.uuid4()}.{file_extension}"
+    file_name = original_filename.rsplit('.', 1)[0] if '.' in original_filename else ''
+    unique_filename = f"{file_name}_{uuid.uuid4()}.{file_extension}"
     file_path = UPLOAD_DIR / unique_filename
 
     # Save the file
@@ -22,3 +23,13 @@ def save_file(file_content: bytes, original_filename: str) -> str:
 
     # Return the relative path as a string
     return str(file_path)
+
+def remove_file(file_path: str):
+    """
+    Remove the file at the given file_path if it exists.
+    """
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    except Exception as e:
+        print(f"Error removing file {file_path}: {str(e)}")

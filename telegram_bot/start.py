@@ -33,6 +33,8 @@ def leitner_conversation(leitner_handler: LeitnerHandler):
                 MessageHandler(filters.TEXT & ~filters.COMMAND, leitner_handler.prepare_section)],
             ConversationState.ADD_SECTION.value: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, leitner_handler.add_section)],
+            ConversationState.PREPARE_DICTIONARY.value: [
+                MessageHandler(filters.Document.ALL, leitner_handler.prepare_dictionary)],
 
             # PD: [MessageHandler(filters.TEXT & ~filters.COMMAND, pd)],
             # SAVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, save)],
@@ -61,20 +63,6 @@ async def start(update, context):
 
 async def help_command(update, context):
     await update.message.reply_text("You can use /start to interact with me.")
-
-
-async def pd(update, context):
-    user_data = update.message.text
-    context.user_data['pd'] = user_data
-    await update.message.reply_text("inter save data location")
-    return SAVE
-
-
-async def save(update, context):
-    saving_data = update.message.text
-    context.user_data['save'] = saving_data
-    await update.message.reply_text(
-        f"saving data in {context.user_data['save']} with data: {context.user_data['pd']}, {context.user_data['word']}")
 
 
 async def cancel(update: Update, context: CallbackContext) -> int:

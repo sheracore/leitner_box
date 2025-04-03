@@ -1,9 +1,9 @@
 import logging
 
 from enum import Enum
+from telegram_bot.utils import save_file, remove_file
 
-from requests import session
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram_bot.config.config import ConversationState, Config
 from telegram_bot.core.db import Database
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class AdminServices(Enum):
-    ADD_COURSE = "ADD_COURSE"
+    ADD_COURSE = "ADD_OR_UPDATE_COURSE"
 
 
 class LeitnerHandler:
@@ -55,6 +55,7 @@ class LeitnerHandler:
             except Exception as e:
                 logger.error(e)
                 await update.message.reply_text(f"Error: {str(e)}")
+                return ConversationHandler.END
 
         return ConversationHandler.END
 
@@ -71,7 +72,7 @@ class LeitnerHandler:
                 session.commit()
 
             context.user_data['course_obj'] = course_obj
-            sections = session.query(Course.sections).filter_by(name=course_obj.name).all()
+            sections = session.query(Section.name).filter_by(course_id=course_obj.id).all()
             sections = [[name[0]] for name in sections]
             if not sections:
                 await update.message.reply_text("Insert a new section name", reply_markup=ReplyKeyboardRemove())
@@ -91,6 +92,7 @@ class LeitnerHandler:
         except Exception as e:
             logger.error(e)
             await update.message.reply_text(f"Error: {str(e)}")
+            return ConversationHandler.END
 
     async def add_section(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         try:
@@ -99,13 +101,55 @@ class LeitnerHandler:
 
             section_name = update.message.text
             course_obj = context.user_data['course_obj']
-            section = session.query(Section).filter_by(name=section_name, course_id=course_obj.id).first()
-            if not section:
-                section = Section(name=section_name, course_id=course_obj.id)
-                session.add(section)
+            section_obj = session.query(Section).filter_by(name=section_name, course_id=course_obj.id).first()
+            if not section_obj:
+                section_obj = Section(name=section_name, course_id=course_obj.id)
+                session.add(section_obj)
                 session.commit()
+            context.user_data['section_obj'] = section_obj
 
+            await update.message.reply_text(
+                f"Section: {section_obj.name}. Now send the csv file to upload as the sample file.",
+                reply_markup=ReplyKeyboardRemove())
+            return ConversationState.PREPARE_DICTIONARY.value
 
         except Exception as e:
             logger.error(e)
             await update.message.reply_text(f"Error: {str(e)}")
+            return ConversationHandler.END
+
+    async def prepare_dictionary(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        file_name = None
+        try:
+            db = Database.get_db()
+            session = next(db)
+
+            # Get the file from Telegram
+            document = update.message.document
+            file = await document.get_file()
+            file_content = await file.download_as_bytearray()
+
+            # Save the file and get the file path
+            course_obj = context.user_data['course_obj']
+            section_obj = context.user_data['section_obj']
+            file_name = f"{course_obj.name}_{section_obj.name}_{document.file_name}"
+            file_path = save_file(file_content, file_name)
+
+            # Update the Section with the file path
+            section = session.query(Section).filter(Section.id == section_obj.id).first()
+            if not section:
+                await update.message.reply_text("Section not found.")
+                return ConversationHandler.END
+
+            remove_file(section.dictionary_file_path)
+            section.dictionary_file_path = file_path
+            session.commit()
+
+            await update.message.reply_text(f"File uploaded successfully for section: {section.name}!")
+            return 10
+        except Exception as e:
+            logger.error(e)
+            await update.message.reply_text(f"Error: {str(e)}")
+            if file_name:
+                remove_file(file_name)
+            return ConversationHandler.END
