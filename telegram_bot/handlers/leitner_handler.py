@@ -1,13 +1,17 @@
+import os
+import csv
 import logging
 
 from enum import Enum
+
+from telegram_bot import Dictionary
 from telegram_bot.utils import save_file, remove_file
 
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram_bot.config.config import ConversationState, Config
 from telegram_bot.core.db import Database
-from telegram_bot.models import Course, Section
+from telegram_bot.models import Course, Section, LanguageChoice, SectionDictionary
 
 # Set up logging to monitor database connection issues
 logging.basicConfig(level=logging.INFO)
@@ -85,7 +89,7 @@ class LeitnerHandler:
 
             await update.message.reply_text(
                 "Insert a new section name or choose from the section list below to edit it.",
-            reply_markup=reply_markup)
+                reply_markup=reply_markup)
 
             return ConversationState.ADD_SECTION.value
 
@@ -107,6 +111,14 @@ class LeitnerHandler:
                 session.add(section_obj)
                 session.commit()
             context.user_data['section_obj'] = section_obj
+
+            dictionary_file_path = "dictionary_sample.csv"
+            with open(dictionary_file_path, "rb") as file:
+                await update.message.reply_document(
+                    document=file,
+                    filename=os.path.basename(dictionary_file_path),
+                    caption=f"Dictionary csv file Sample"
+                )
 
             await update.message.reply_text(
                 f"Section: {section_obj.name}. Now send the csv file to upload as the sample file.",
@@ -134,6 +146,7 @@ class LeitnerHandler:
             section_obj = context.user_data['section_obj']
             file_name = f"{course_obj.name}_{section_obj.name}_{document.file_name}"
             file_path = save_file(file_content, file_name)
+            context.user_data['file_path'] = file_path
 
             # Update the Section with the file path
             section = session.query(Section).filter(Section.id == section_obj.id).first()
@@ -144,12 +157,41 @@ class LeitnerHandler:
             remove_file(section.dictionary_file_path)
             section.dictionary_file_path = file_path
             session.commit()
+            await self._parse_dictionary_file(session, file_path, section_obj)
+            await update.message.reply_text(f"File uploaded and parsed successfully for section: {section.name}!")
 
-            await update.message.reply_text(f"File uploaded successfully for section: {section.name}!")
-            return 10
+            return ConversationState.PARSE_DICTIONARY.value
+
         except Exception as e:
             logger.error(e)
             await update.message.reply_text(f"Error: {str(e)}")
             if file_name:
                 remove_file(file_name)
             return ConversationHandler.END
+
+    async def _parse_dictionary_file(self, session, file_path: str, section_obj: Section) -> None:
+        try:
+            with open(file_path, "r") as csvfile:
+                csv_reader = csv.reader(csvfile)
+                next(csv_reader)  # Skip the header row
+                for row in csv_reader:
+                    try:
+                        word = row[0]
+                        meaning = row[1]
+                        # TODO: add examples
+
+                        dictionary_obj = session.query(Dictionary).filter_by(word=word, language=LanguageChoice.EN).first()
+                        if not dictionary_obj:
+                            dictionary_obj = Dictionary(word=word, meaning=meaning, language=LanguageChoice.EN)
+                            session.add(dictionary_obj)
+                            session.commit()
+
+                        session.add(SectionDictionary(section_id=section_obj.id, dictionary_id=dictionary_obj.id))
+                        session.commit()
+                    except Exception as e:
+                        logger.error(e)
+                        raise Exception(f"Unsuccessful adding dictionary: {row[0]} with error: {str(e)}")
+
+        except Exception as e:
+            logger.error(e)
+            raise Exception(f"Dictionary csv file can't be parsed: {str(e)}")

@@ -1,4 +1,6 @@
-from sqlalchemy import Column, String, Integer, ForeignKey
+import sqlalchemy
+
+from sqlalchemy import Column, Integer, ForeignKey
 from sqlalchemy.orm import relationship
 from .base import Base
 
@@ -12,3 +14,7 @@ class SectionDictionary(Base):
 
     section = relationship("Section", back_populates="dictionaries")
     dictionary = relationship("Dictionary", back_populates="sections")
+
+    __table_args__ = (
+        sqlalchemy.UniqueConstraint('section_id', 'dictionary_id', name='uix_section_dictionary'),
+    )

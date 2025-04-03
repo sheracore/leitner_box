@@ -19,6 +19,7 @@ class ConversationState(Enum):
     PREPARE_SECTION = auto()
     ADD_SECTION = auto()
     PREPARE_DICTIONARY = auto()
+    PARSE_DICTIONARY = auto()
 
     CHOOSE_COURSE = auto()
     BLOCKCHAIN_URL = auto()

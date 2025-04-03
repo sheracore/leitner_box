@@ -19,6 +19,7 @@ postgres=# \q
 ```
 ### After each change in models do the following steps 
 ```angular2html
+alembic stamp head
 alembic revision -m "[Change a filed of leitner]"
 alembic upgrade head
 python main migrate
