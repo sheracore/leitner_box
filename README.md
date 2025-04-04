@@ -4,7 +4,6 @@ Telegram bot which provides Leitner courses
 
 ## Postgres
 Change values in brackets to what you set in .env file for db name, user and password.
-Also create database for running tests
 ```commandline
 sudo -u postgres psql
 postgres=# CREATE DATABASE [your db name];
