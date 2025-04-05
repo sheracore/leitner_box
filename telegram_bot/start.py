@@ -8,7 +8,7 @@ dotenv.load_dotenv()
 os.environ['http_proxy'] = 'http://127.0.0.1:2081'
 os.environ['https_proxy'] = 'http://127.0.0.1:2081'
 
-from telegram.ext import Application, CommandHandler, ConversationHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, ConversationHandler, MessageHandler, filters, CallbackQueryHandler
 
 from telegram_bot.config.config import Config
 
@@ -29,6 +29,12 @@ def leitner_conversation(leitner_handler: LeitnerHandler):
                 MessageHandler(filters.TEXT & ~filters.COMMAND, leitner_handler.add_section)],
             ConversationState.PREPARE_DICTIONARY.value: [
                 MessageHandler(filters.Document.ALL, leitner_handler.prepare_dictionary)],
+            ConversationState.COURSES.value: [
+                CallbackQueryHandler(leitner_handler.courses, pattern='^courses')],
+            ConversationState.COURSE.value: [
+                CallbackQueryHandler(leitner_handler.course, pattern='^course_')],
+            ConversationState.UPDATE_LEITNER.value: [
+                CallbackQueryHandler(leitner_handler.update_leitner, pattern='^section_')],
 
         },
         fallbacks=[CommandHandler('close', leitner_handler.close)],
