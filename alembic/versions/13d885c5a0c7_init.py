@@ -1,8 +1,8 @@
 """init
 
-Revision ID: e32987ac3af9
+Revision ID: 13d885c5a0c7
 Revises: 
-Create Date: 2025-04-03 15:37:50.688905
+Create Date: 2025-04-05 02:47:22.650324
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'e32987ac3af9'
+revision: str = '13d885c5a0c7'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -30,7 +30,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_courses_id'), 'courses', ['id'], unique=False)
     op.create_table('dictionaries',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('language', sa.String(), nullable=False),
+    sa.Column('language', sa.Enum('EN', 'FR', name='languagechoice'), nullable=False),
     sa.Column('word', sa.String(), nullable=False),
     sa.Column('meaning', sa.String(), nullable=False),
     sa.PrimaryKeyConstraint('id'),
@@ -38,11 +38,13 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_dictionaries_id'), 'dictionaries', ['id'], unique=False)
     op.create_table('users',
-    sa.Column('telegram_user_id', sa.String(), nullable=False),
-    sa.Column('name', sa.String(), nullable=True),
-    sa.PrimaryKeyConstraint('telegram_user_id')
+    sa.Column('user_id', sa.String(), nullable=False),
+    sa.Column('username', sa.String(), nullable=True),
+    sa.Column('first_name', sa.String(), nullable=True),
+    sa.Column('last_name', sa.String(), nullable=True),
+    sa.PrimaryKeyConstraint('user_id')
     )
-    op.create_index(op.f('ix_users_telegram_user_id'), 'users', ['telegram_user_id'], unique=False)
+    op.create_index(op.f('ix_users_user_id'), 'users', ['user_id'], unique=False)
     op.create_table('leitner',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('dictionary_id', sa.Integer(), nullable=False),
@@ -50,7 +52,7 @@ def upgrade() -> None:
     sa.Column('user_id', sa.String(), nullable=False),
     sa.Column('review_datetime', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['dictionary_id'], ['dictionaries.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['users.telegram_user_id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.user_id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_leitner_id'), 'leitner', ['id'], unique=False)
@@ -69,7 +71,8 @@ def upgrade() -> None:
     sa.Column('dictionary_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['dictionary_id'], ['dictionaries.id'], ),
     sa.ForeignKeyConstraint(['section_id'], ['sections.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('section_id', 'dictionary_id', name='uix_section_dictionary')
     )
     op.create_index(op.f('ix_section_dictionaries_id'), 'section_dictionaries', ['id'], unique=False)
     # ### end Alembic commands ###
@@ -84,7 +87,7 @@ def downgrade() -> None:
     op.drop_table('sections')
     op.drop_index(op.f('ix_leitner_id'), table_name='leitner')
     op.drop_table('leitner')
-    op.drop_index(op.f('ix_users_telegram_user_id'), table_name='users')
+    op.drop_index(op.f('ix_users_user_id'), table_name='users')
     op.drop_table('users')
     op.drop_index(op.f('ix_dictionaries_id'), table_name='dictionaries')
     op.drop_table('dictionaries')

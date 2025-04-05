@@ -4,14 +4,16 @@ import logging
 
 from enum import Enum
 
+from requests import session
+
 from telegram_bot import Dictionary
 from telegram_bot.utils import save_file, remove_file
 
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import ContextTypes, ConversationHandler
+from telegram.ext import ContextTypes, ConversationHandler, CallbackContext
 from telegram_bot.config.config import ConversationState, Config
 from telegram_bot.core.db import Database
-from telegram_bot.models import Course, Section, LanguageChoice, SectionDictionary
+from telegram_bot.models import Course, Section, LanguageChoice, SectionDictionary, User
 
 # Set up logging to monitor database connection issues
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +25,44 @@ class AdminServices(Enum):
 
 
 class LeitnerHandler:
+
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        try:
+            db = Database.get_db()
+            session = next(db)
+
+            first_name = update.message.from_user.first_name
+            last_name = update.message.from_user.last_name
+            username = update.effective_user.name
+            user_id = str(update.effective_user.id)
+
+            if not session.query(User).filter_by(user_id=user_id).first():
+                session.add(User(first_name=first_name, last_name=last_name, username=username, user_id=user_id))
+                session.commit()
+
+            start_text = (
+            f"کاربر {first_name} عزیز به لایتنر باکس خوش آمدید.\n\n"
+            "🚀 از دستور /start برای شروع دوباره استفاده کنید.\n"
+            "ℹ️ از دستور /help برای آموزش استفاده از لایتنر باکس استفاده کنید.\n"
+            "⚙️ از دستور /setting برای مدیریت لایتنرتان استفاده کنید.\n"
+        )
+            if str(user_id) in Config.ADMIN_IDS:
+                start_text += "👑 از دستور /admin برای مدیریت دوره ها توسط ادمین استفاده کنید.\n"
+                start_text += "❌ از دستور /close برای خاتمه به مکالمه فعلی.\n"
+
+            await update.message.reply_text(start_text)
+
+
+        except Exception as e:
+            logger.error(e)
+            await update.message.reply_text(f"خطایی رخ داده لطفا بعدا تلاش کنید و به ادمین اطلاع بدهید: {e}")
+
+    async def close(self, update: Update, context: CallbackContext) -> int:
+        await update.message.reply_text("مکالمه فعلا به پایان رسید برای شروع دباره /start را بزنید")
+        return ConversationHandler.END
+
+    async def help(self, update: Update, context: CallbackContext) -> None:
+        await update.message.reply_text("این راهنمای استفاده از لایتنر باکسه")
 
     async def admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         user_id = update.effective_user.id
@@ -37,7 +77,7 @@ class LeitnerHandler:
             resize_keyboard=True)
 
         await update.message.reply_text(
-            "Please choose between services",
+            "لطفا یکی از خدمت ها را انتخاب کنید",
             reply_markup=reply_markup
         )
         return ConversationState.CHOOSE_SERVICE.value
@@ -53,7 +93,7 @@ class LeitnerHandler:
                                                    resize_keyboard=True,
                                                    one_time_keyboard=True)
 
-                await update.message.reply_text("Select between Course names or insert new Course name",
+                await update.message.reply_text("لطفا یک دوره را انتخاب کنید یا اسم دوره جدید وارد کنید:",
                                                 reply_markup=reply_markup)
                 return ConversationState.PREPARE_SECTION.value
             except Exception as e:
@@ -79,7 +119,7 @@ class LeitnerHandler:
             sections = session.query(Section.name).filter_by(course_id=course_obj.id).all()
             sections = [[name[0]] for name in sections]
             if not sections:
-                await update.message.reply_text("Insert a new section name", reply_markup=ReplyKeyboardRemove())
+                await update.message.reply_text("یک بخش جدید وارد کنید(برای مثلا Oxford intermediate) برای دوره Oxford", reply_markup=ReplyKeyboardRemove())
                 return ConversationState.ADD_SECTION.value
 
             reply_markup = ReplyKeyboardMarkup(
@@ -88,7 +128,7 @@ class LeitnerHandler:
                 resize_keyboard=True)
 
             await update.message.reply_text(
-                "Insert a new section name or choose from the section list below to edit it.",
+                "یک بخش جدید وارد کنید یا بین یخش های زیر یک بخش را برای ادیت کردن آن انتخاب کنید",
                 reply_markup=reply_markup)
 
             return ConversationState.ADD_SECTION.value
@@ -121,7 +161,7 @@ class LeitnerHandler:
                 )
 
             await update.message.reply_text(
-                f"Section: {section_obj.name}. Now send the csv file to upload as the sample file.",
+                f"Section: {section_obj.name}. حالا فایل csv برای پر کردن دیکشنری های بخش را همانند فایل نمونه ضمیمه شده ارسال کنید",
                 reply_markup=ReplyKeyboardRemove())
             return ConversationState.PREPARE_DICTIONARY.value
 
@@ -158,9 +198,9 @@ class LeitnerHandler:
             section.dictionary_file_path = file_path
             session.commit()
             await self._parse_dictionary_file(session, file_path, section_obj)
-            await update.message.reply_text(f"File uploaded and parsed successfully for section: {section.name}!")
+            await update.message.reply_text(f"فال با موقعیت آپلود و پارس شد: {section.name}!")
 
-            return ConversationState.PARSE_DICTIONARY.value
+            return ConversationHandler.END
 
         except Exception as e:
             logger.error(e)

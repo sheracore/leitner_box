@@ -9,6 +9,7 @@ from .base import Base
 
 class LanguageChoice(enum.Enum):
     EN = "en"
+    FR = "fr"
 
 
 class Dictionary(Base):
