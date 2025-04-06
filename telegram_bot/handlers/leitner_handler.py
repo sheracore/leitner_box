@@ -10,7 +10,7 @@ from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKey
 from telegram.ext import ContextTypes, ConversationHandler, CallbackContext
 from telegram_bot.config.config import ConversationState, Config
 from telegram_bot.core.db import Database
-from telegram_bot.models import Course, Section, LanguageChoice, SectionDictionary, User, course
+from telegram_bot.models import Course, Section, LanguageChoice, SectionDictionary, User, Leitner
 
 # Set up logging to monitor database connection issues
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +23,6 @@ class AdminServices(Enum):
 
 class SectionKeys(Enum):
     SECTION_ALL = "section_all"
-
 
 
 class LeitnerHandler:
@@ -47,10 +46,10 @@ class LeitnerHandler:
                 "🚀 از دستور /start برای شروع دوباره استفاده کنید.\n"
                 "ℹ️ از دستور /help برای آموزش استفاده از لایتنر باکس استفاده کنید.\n"
                 "⚙️ از دستور /setting برای مدیریت لایتنرتان استفاده کنید.\n"
+                "❌ از دستور /close برای خاتمه به مکالمه فعلی.\n"
             )
             if str(user_id) in Config.ADMIN_IDS:
                 start_text += "👑 از دستور /admin برای مدیریت دوره ها توسط ادمین استفاده کنید.\n"
-                start_text += "❌ از دستور /close برای خاتمه به مکالمه فعلی.\n"
 
             await update.message.reply_text(start_text)
 
@@ -108,12 +107,15 @@ class LeitnerHandler:
             sections_inline = [[InlineKeyboardButton(section.name, callback_data=f"section_{section.name}")] for section
                                in sections]
             sections_inline.append(
-                [InlineKeyboardButton("اضافه کردن همه", callback_data=f"{SectionKeys.SECTION_ALL.value}")])
+                [InlineKeyboardButton("اضافه کردن همه", callback_data=f"{SectionKeys.SECTION_ALL.value}"),
+                 InlineKeyboardButton("بازگشت به عقب", callback_data=f"courses")])
             reply_markup = InlineKeyboardMarkup(sections_inline)
 
             message = ''.join(
                 [f"📘 {section.name} -> {len(section.dictionaries)} words\n" for section in sections])
-            await query.edit_message_text(f"این دوره شامل بخش های زیر می باشد\n\n{message}", reply_markup=reply_markup)
+            await query.edit_message_text(
+                f"این دوره شامل بخش های زیر می باشد برای اضافه کردن به لایتنر روی دکمه ها بزنید.\n\n{message}",
+                reply_markup=reply_markup)
             return ConversationState.UPDATE_LEITNER.value
 
         except Exception as e:
@@ -124,16 +126,33 @@ class LeitnerHandler:
     async def update_leitner(self, update: Update, context: CallbackContext) -> int:
         query = update.callback_query
         await query.answer()
+        user_id = str(query.from_user.id)
+        dictionaries = []
+
         try:
             db = Database.get_db()
             session = next(db)
             section_name = query.data
+            course_name = ''
 
             if section_name == SectionKeys.SECTION_ALL.value:
+                course_name = context.user_data['course']
+                sections = session.query(Course).filter_by(name=course_name).first().sections
+                section_ids = [section.id for section in sections]
+                dictionaries = session.query(SectionDictionary.dictionary_id).filter(
+                    SectionDictionary.section_id.in_(section_ids)).distinct()
 
+            for dictionary in dictionaries:
+                if not session.query(Leitner).filter_by(dictionary_id=dictionary[0], user_id=user_id).first():
+                    session.add(Leitner(dictionary_id=dictionary[0], user_id=user_id))
+            session.commit()
 
+            if section_name == SectionKeys.SECTION_ALL.value:
+                await query.edit_message_text(f" دوره {course_name} با موفقیت به لیست لایتنر هایت اضافه شد!")
+            else:
+                await query.edit_message_text(f" بخش {section_name} با موفقیت به لیست لایتنر هایت اضافه شد!")
 
-
+            return ConversationHandler.END
 
         except Exception as e:
             logger.error(e)
