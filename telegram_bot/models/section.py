@@ -13,3 +13,4 @@ class Section(Base):
 
     course = relationship("Course", back_populates="sections")
     dictionaries = relationship("SectionDictionary", back_populates="section")
+    leitner_settings = relationship("UserLeitnerSetting", back_populates="section")

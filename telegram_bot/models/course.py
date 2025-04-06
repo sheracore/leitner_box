@@ -10,3 +10,4 @@ class Course(Base):
     name = Column(String, nullable=False, unique=True)
 
     sections = relationship("Section", back_populates="course")
+    leitner_settings = relationship("UserLeitnerSetting", back_populates="course")

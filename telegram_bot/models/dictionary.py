@@ -16,7 +16,7 @@ class Dictionary(Base):
     __tablename__ = "dictionaries"
 
     id = Column(Integer, primary_key=True, index=True)
-    language = Column(Enum(LanguageChoice), default=LanguageChoice.EN, nullable=False)
+    language = Column(Enum(LanguageChoice, create_type=False), default=LanguageChoice.EN, nullable=False)
     word = Column(String, nullable=False)
     meaning = Column(String, nullable=False)
 

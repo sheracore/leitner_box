@@ -13,3 +13,4 @@ class User(Base):
     last_name = Column(String, nullable=True)
 
     leitner_entries = relationship("Leitner", back_populates="user")
+    leitner_settings = relationship("UserLeitnerSetting", back_populates="user")

@@ -10,7 +10,7 @@ from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKey
 from telegram.ext import ContextTypes, ConversationHandler, CallbackContext
 from telegram_bot.config.config import ConversationState, Config
 from telegram_bot.core.db import Database
-from telegram_bot.models import Course, Section, LanguageChoice, SectionDictionary, User, Leitner
+from telegram_bot.models import Course, Section, LanguageChoice, SectionDictionary, User, Leitner, UserLeitnerSetting
 
 # Set up logging to monitor database connection issues
 logging.basicConfig(level=logging.INFO)
@@ -132,16 +132,30 @@ class LeitnerHandler:
         try:
             db = Database.get_db()
             session = next(db)
-            section_name = query.data
-            course_name = ''
 
-            if section_name == SectionKeys.SECTION_ALL.value:
-                course_name = context.user_data['course']
+            section_name = query.data.split("section_")[1]
+            course_name = context.user_data['course']
+            course_obj = session.query(Course).filter_by(name=course_name).first()
+            sections = session.query(Section).filter_by(name=section_name).first()
+            sections = [sections] if sections else []
+
+            if query.data == SectionKeys.SECTION_ALL.value:
                 sections = session.query(Course).filter_by(name=course_name).first().sections
-                section_ids = [section.id for section in sections]
-                dictionaries = session.query(SectionDictionary.dictionary_id).filter(
-                    SectionDictionary.section_id.in_(section_ids)).distinct()
 
+            section_ids = [section.id for section in sections]
+            # Add sections to user leitner settings
+            for s_id in section_ids:
+                if not session.query(UserLeitnerSetting).filter_by(user_id=user_id,
+                                                                   section_id=s_id,
+                                                                   course_id=course_obj.id).first():
+                    session.add(UserLeitnerSetting(user_id=user_id,
+                                                   section_id=s_id,
+                                                   course_id=course_obj.id))
+
+
+            # Add dictionaries to user leitner
+            dictionaries = session.query(SectionDictionary.dictionary_id).filter(
+                SectionDictionary.section_id.in_(section_ids)).distinct()
             for dictionary in dictionaries:
                 if not session.query(Leitner).filter_by(dictionary_id=dictionary[0], user_id=user_id).first():
                     session.add(Leitner(dictionary_id=dictionary[0], user_id=user_id))
@@ -156,7 +170,7 @@ class LeitnerHandler:
 
         except Exception as e:
             logger.error(e)
-            await query.edit_message_text(f"خطایی رخ داده لطفا بعدا تلاش کنید و به ادمین اطلاع بدهید: {e}")
+            await query.edit_message_text(f"خطایی رخ داده لطفا دوباره تلاش کنید و درصورت نیاز به ادمین اطلاع بدهید: {e}")
             return ConversationHandler.END
 
     async def close(self, update: Update, context: CallbackContext) -> int:
