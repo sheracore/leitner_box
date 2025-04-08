@@ -1,9 +1,9 @@
 # leitner_box
-Telegram bot which provides Leitner courses
+Telegram bot that provides Leitner courses
 
 
 ## Postgres
-Change values in brackets to what you set in .env file for db name, user and password.
+Change values in brackets to what you set in the .env file for the db name, user, and password.
 ```commandline
 sudo -u postgres psql
 postgres=# CREATE DATABASE [your db name];
@@ -16,7 +16,7 @@ postgres=# \q
 ```angular2html
  python main migrate
 ```
-### After each change in models do the following steps 
+### After each change in models, do the following steps 
 ```angular2html
 alembic stamp head
 alembic revision -m "[Change a filed of leitner]"
