@@ -23,16 +23,23 @@ def leitner_conversation(leitner_handler: LeitnerHandler):
 
             ConversationState.CHOOSE_SERVICE.value: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, leitner_handler.choose_service)],
+
             ConversationState.PREPARE_SECTION.value: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, leitner_handler.prepare_section)],
+
             ConversationState.ADD_SECTION.value: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, leitner_handler.add_section)],
+
             ConversationState.PREPARE_DICTIONARY.value: [
                 MessageHandler(filters.Document.ALL, leitner_handler.prepare_dictionary)],
-            ConversationState.COURSES.value: [
-                CallbackQueryHandler(leitner_handler.courses, pattern='^courses')],
+
+            ConversationState.START_SECTIONS.value: [
+                CallbackQueryHandler(leitner_handler.courses, pattern='^courses'),
+                CallbackQueryHandler(leitner_handler.user_leitner_setting, pattern='^user_leitner_setting')],
+
             ConversationState.COURSE.value: [
                 CallbackQueryHandler(leitner_handler.course, pattern='^course_')],
+
             ConversationState.UPDATE_LEITNER.value: [
                 CallbackQueryHandler(leitner_handler.update_leitner, pattern='^section_'),
                 CallbackQueryHandler(leitner_handler.courses, pattern='^courses')],

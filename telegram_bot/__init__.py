@@ -3,6 +3,7 @@ from .models import (Section,
                      Dictionary,
                      SectionDictionary,
                      Leitner,
+                     StateEnum,
                      User,
                      LanguageChoice,
                      UserLeitnerSetting)

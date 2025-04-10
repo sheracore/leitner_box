@@ -3,6 +3,8 @@ import csv
 import logging
 
 from enum import Enum
+from sqlalchemy import asc
+from sqlalchemy import func
 
 from telegram_bot import Dictionary
 from telegram_bot.utils import save_file, remove_file
@@ -10,7 +12,14 @@ from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKey
 from telegram.ext import ContextTypes, ConversationHandler, CallbackContext
 from telegram_bot.config.config import ConversationState, Config
 from telegram_bot.core.db import Database
-from telegram_bot.models import Course, Section, LanguageChoice, SectionDictionary, User, Leitner, UserLeitnerSetting
+from telegram_bot.models import (Course,
+                                 Section,
+                                 LanguageChoice,
+                                 SectionDictionary,
+                                 User,
+                                 Leitner,
+                                 UserLeitnerSetting,
+                                 StateEnum)
 
 # Set up logging to monitor database connection issues
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +32,22 @@ class AdminServices(Enum):
 
 class SectionKeys(Enum):
     SECTION_ALL = "section_all"
+
+
+leitner_box_translator = {
+    StateEnum.BOX1: "تازه",
+    StateEnum.BOX2: "در حال یادگیری",
+    StateEnum.BOX3: "نیمه‌آشنا",
+    StateEnum.BOX4: "آشنا",
+    StateEnum.BOX5: "تسلط",
+}
+leitner_progress_map = {
+    StateEnum.BOX1: 0,
+    StateEnum.BOX2: 25,
+    StateEnum.BOX3: 50,
+    StateEnum.BOX4: 75,
+    StateEnum.BOX5: 100
+}
 
 
 class LeitnerHandler:
@@ -57,7 +82,7 @@ class LeitnerHandler:
                 [
                     InlineKeyboardButton("مرور لایتنر امروز", callback_data="my_leitner"),
                     InlineKeyboardButton("همه دوره ها", callback_data="courses"),
-                    InlineKeyboardButton("مدیریت لایتنر من", callback_data="my_setting"),
+                    InlineKeyboardButton("مدیریت لایتنر من", callback_data="user_leitner_setting"),
                 ]
             ]
             message = (
@@ -67,7 +92,7 @@ class LeitnerHandler:
             reply_markup = InlineKeyboardMarkup(inline_keyboard)
             await update.message.reply_text(message, reply_markup=reply_markup)
 
-            return ConversationState.COURSES.value
+            return ConversationState.START_SECTIONS.value
 
         except Exception as e:
             logger.error(e)
@@ -127,7 +152,6 @@ class LeitnerHandler:
         query = update.callback_query
         await query.answer()
         user_id = str(query.from_user.id)
-        dictionaries = []
 
         try:
             db = Database.get_db()
@@ -152,7 +176,6 @@ class LeitnerHandler:
                                                    section_id=s_id,
                                                    course_id=course_obj.id))
 
-
             # Add dictionaries to user leitner
             dictionaries = session.query(SectionDictionary.dictionary_id).filter(
                 SectionDictionary.section_id.in_(section_ids)).distinct()
@@ -161,24 +184,65 @@ class LeitnerHandler:
                     session.add(Leitner(dictionary_id=dictionary[0], user_id=user_id))
             session.commit()
 
-            if section_name == SectionKeys.SECTION_ALL.value:
-                await query.edit_message_text(f" دوره {course_name} با موفقیت به لیست لایتنر هایت اضافه شد!")
+            if query.data == SectionKeys.SECTION_ALL.value:
+                await query.edit_message_text(f" ✅ دوره {course_name} با موفقیت به لیست لایتنر شما اضافه شد!")
             else:
-                await query.edit_message_text(f" بخش {section_name} با موفقیت به لیست لایتنر هایت اضافه شد!")
+                await query.edit_message_text(f" ✅ بخش {section_name} با موفقیت به لیست لایتنر شما اضافه شد!")
 
             return ConversationHandler.END
 
         except Exception as e:
             logger.error(e)
-            await query.edit_message_text(f"خطایی رخ داده لطفا دوباره تلاش کنید و درصورت نیاز به ادمین اطلاع بدهید: {e}")
+            await query.edit_message_text(
+                f"خطایی رخ داده لطفا دوباره تلاش کنید و درصورت نیاز به ادمین اطلاع بدهید: {e}")
             return ConversationHandler.END
 
-    async def close(self, update: Update, context: CallbackContext) -> int:
-        await update.message.reply_text("مکالمه فعلا به پایان رسید برای شروع دباره /start را بزنید")
-        return ConversationHandler.END
+    async def user_leitner_setting(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        await query.answer()
+        user_id = str(query.from_user.id)
+        try:
+            db = Database.get_db()
+            session = next(db)
 
-    async def help(self, update: Update, context: CallbackContext) -> None:
-        await update.message.reply_text("این راهنمای استفاده از لایتنر باکسه")
+            state_msg = "🎉شما ۳۰ درصد از کل لایتنرتان پیشرفتید پرقدرت ادامه دهید\n"
+
+            translated_box_msg = '\n'.join([f"✔️ {translated}" for _, translated in leitner_box_translator.items()])
+            state_msg += f"📊وضعیت لایتنر شما در {len(leitner_box_translator)} جعبه در حالت های زیر مدیریت می شود: \n{translated_box_msg} \n📌که وضعیت فعلی شما بصورت زیر می باشد:"
+
+            state_counts = session.query(Leitner.state, func.count(Leitner.id).label('count')).group_by(
+                Leitner.state).filter_by(user_id=user_id).all()
+
+            for state, count in state_counts:
+                state_msg += f"\n{count} لغت در حالت {leitner_box_translator.get(state)}"
+            state_msg += "\n⚙️در ادامه می توانید دوره های خود را مدیریت کنید:"
+
+            await query.message.reply_text(state_msg)
+
+            user_leitners = session.query(UserLeitnerSetting).filter_by(user_id=user_id).order_by(
+                asc(UserLeitnerSetting.course_id)).all()
+            for user_leitner in user_leitners:
+                course_name = user_leitner.course.name
+                section_name = user_leitner.section.name
+                active_msg = "'فعال'" if user_leitner.active else "'غیرفعال'"
+                active_button = "غیرفعال کردن" if user_leitner.active else "فعال کردن"
+
+                message = f" 📚دوره {course_name}\n"
+                message += f"📘بخش {section_name} از دوره {course_name} در حالت {active_msg} می باشد."
+
+                inline_button = [InlineKeyboardButton("حذف کردن از لایتنرم", callback_data=f"section_{section_name}"),
+                                 InlineKeyboardButton(active_button, callback_data=f"section_{section_name}")]
+
+                reply_markup = InlineKeyboardMarkup([inline_button])
+                await query.message.reply_text(message, reply_markup=reply_markup)
+
+            return ConversationHandler.END
+
+        except Exception as e:
+            logger.error(e)
+            await query.edit_message_text(
+                f"خطایی رخ داده لطفا دوباره تلاش کنید و درصورت نیاز به ادمین اطلاع بدهید: {e}")
+            return ConversationHandler.END
 
     async def admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         user_id = update.effective_user.id
@@ -315,7 +379,7 @@ class LeitnerHandler:
             section.dictionary_file_path = file_path
             session.commit()
             await self._parse_dictionary_file(session, file_path, section_obj)
-            await update.message.reply_text(f"فال با موقعیت آپلود و پارس شد: {section.name}!")
+            await update.message.reply_text(f" ✅فایل{section.name} با موقعیت آپلود و پارس شد: !")
 
             return ConversationHandler.END
 
@@ -355,3 +419,10 @@ class LeitnerHandler:
             logger.error(e)
             session.rollback()
             raise Exception(f"Dictionary csv file can't be parsed: {str(e)}")
+
+    async def close(self, update: Update, context: CallbackContext) -> int:
+        await update.message.reply_text("مکالمه فعلا به پایان رسید برای شروع دباره /start را بزنید")
+        return ConversationHandler.END
+
+    async def help(self, update: Update, context: CallbackContext) -> None:
+        await update.message.reply_text("این راهنمای استفاده از لایتنر باکسه")
