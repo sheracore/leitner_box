@@ -204,17 +204,14 @@ class LeitnerHandler:
         try:
             db = Database.get_db()
             session = next(db)
-
-            state_msg = "🎉شما ۳۰ درصد از کل لایتنرتان پیشرفتید پرقدرت ادامه دهید\n"
-
-            translated_box_msg = '\n'.join([f"✔️ {translated}" for _, translated in leitner_box_translator.items()])
-            state_msg += f"📊وضعیت لایتنر شما در {len(leitner_box_translator)} جعبه در حالت های زیر مدیریت می شود: \n{translated_box_msg} \n📌که وضعیت فعلی شما بصورت زیر می باشد:"
-
             state_counts = session.query(Leitner.state, func.count(Leitner.id).label('count')).group_by(
                 Leitner.state).filter_by(user_id=user_id).all()
 
+            state_msg = self._calculate_state_percentate(state_counts)
+            state_msg += self._calculate_boxes_status()
+
             for state, count in state_counts:
-                state_msg += f"\n{count} لغت در حالت {leitner_box_translator.get(state)}"
+                state_msg += f"\n 🟢 {count} لغت در حالت {leitner_box_translator.get(state)}"
             state_msg += "\n⚙️در ادامه می توانید دوره های خود را مدیریت کنید:"
 
             await query.message.reply_text(state_msg)
@@ -230,8 +227,10 @@ class LeitnerHandler:
                 message = f" 📚دوره {course_name}\n"
                 message += f"📘بخش {section_name} از دوره {course_name} در حالت {active_msg} می باشد."
 
-                inline_button = [InlineKeyboardButton("حذف کردن از لایتنرم", callback_data=f"section_{section_name}"),
-                                 InlineKeyboardButton(active_button, callback_data=f"section_{section_name}")]
+                inline_button = [InlineKeyboardButton("حذف کردن از لایتنرم",
+                                                      callback_data=f"leitner_remove_{user_leitner.section.id}"),
+                                 InlineKeyboardButton(active_button,
+                                                      callback_data=f"section_active_{not user_leitner.active}")]
 
                 reply_markup = InlineKeyboardMarkup([inline_button])
                 await query.message.reply_text(message, reply_markup=reply_markup)
@@ -240,9 +239,46 @@ class LeitnerHandler:
 
         except Exception as e:
             logger.error(e)
+            await query.message.reply_text(
+                f"خطایی رخ داده لطفا دوباره تلاش کنید و درصورت نیاز به ادمین اطلاع بدهید: {e}")
+            return ConversationHandler.END
+
+    async def user_leitner_setting_action(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        await query.answer()
+        user_id = str(query.from_user.id)
+        print(query.data)
+        try:
+            db = Database.get_db()
+            session = next(db)
+
+        except Exception as e:
+            logger.error(e)
             await query.edit_message_text(
                 f"خطایی رخ داده لطفا دوباره تلاش کنید و درصورت نیاز به ادمین اطلاع بدهید: {e}")
             return ConversationHandler.END
+
+    def _calculate_state_percentate(self, state_counts: list):
+        # Calculate total cards and weighted progress
+        total_cards = 0
+        weighted_progress = 0
+
+        for state, count in state_counts:
+            total_cards += count
+            weighted_progress += count * leitner_progress_map[state]
+
+        # Avoid division by zero
+        if total_cards == 0:
+            progress_percent = 0
+        else:
+            progress_percent = (weighted_progress / total_cards)
+
+        progress_percent = round(progress_percent, 2)
+        return f"🎉شما {progress_percent} درصد از کل لایتنرتان پیشرفتید پرقدرت ادامه دهید\n"
+
+    def _calculate_boxes_status(self):
+        translated_box_msg = '\n'.join([f"✔️ {translated}" for _, translated in leitner_box_translator.items()])
+        return f"📊وضعیت لایتنر شما در {len(leitner_box_translator)} جعبه در حالت های زیر مدیریت می شود: \n{translated_box_msg} \n📌که وضعیت فعلی شما بصورت زیر می باشد:"
 
     async def admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         user_id = update.effective_user.id
