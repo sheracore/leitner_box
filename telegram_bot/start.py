@@ -44,8 +44,12 @@ def leitner_conversation(leitner_handler: LeitnerHandler):
                 CallbackQueryHandler(leitner_handler.update_leitner, pattern='^section_'),
                 CallbackQueryHandler(leitner_handler.courses, pattern='^courses')],
 
+            ConversationState.USER_LEITNER_SETTING.value: [
+                CallbackQueryHandler(leitner_handler.user_leitner_setting_action, pattern='^leitner_setting')],
+
         },
         fallbacks=[CommandHandler('close', leitner_handler.close)],
+        allow_reentry=True
     )
 
 

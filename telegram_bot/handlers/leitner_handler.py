@@ -221,6 +221,7 @@ class LeitnerHandler:
             for user_leitner in user_leitners:
                 course_name = user_leitner.course.name
                 section_name = user_leitner.section.name
+                section_id = user_leitner.section.id
                 active_msg = "'فعال'" if user_leitner.active else "'غیرفعال'"
                 active_button = "غیرفعال کردن" if user_leitner.active else "فعال کردن"
 
@@ -228,14 +229,14 @@ class LeitnerHandler:
                 message += f"📘بخش {section_name} از دوره {course_name} در حالت {active_msg} می باشد."
 
                 inline_button = [InlineKeyboardButton("حذف کردن از لایتنرم",
-                                                      callback_data=f"leitner_remove_{user_leitner.section.id}"),
+                                                      callback_data=f"leitner_setting_remove_{section_id}"),
                                  InlineKeyboardButton(active_button,
-                                                      callback_data=f"section_active_{not user_leitner.active}")]
+                                                      callback_data=f"leitner_setting_active_{section_id}_{not user_leitner.active}")]
 
                 reply_markup = InlineKeyboardMarkup([inline_button])
                 await query.message.reply_text(message, reply_markup=reply_markup)
 
-            return ConversationHandler.END
+            return ConversationState.USER_LEITNER_SETTING.value
 
         except Exception as e:
             logger.error(e)
@@ -247,10 +248,59 @@ class LeitnerHandler:
         query = update.callback_query
         await query.answer()
         user_id = str(query.from_user.id)
-        print(query.data)
+        data = query.data
         try:
             db = Database.get_db()
             session = next(db)
+            section_id = int(data.split("_")[3])
+            if 'remove' in data:
+                user_leitner_sections = session.query(UserLeitnerSetting).filter_by(user_id=user_id).all()
+                user_leitner_section_ids = [s.section_id for s in user_leitner_sections]
+
+                # Avoid removing dictionaries used by other courses
+                exclude_dictionary_ids = (
+                    session.query(SectionDictionary.dictionary_id,
+                                  func.count(SectionDictionary.dictionary_id).label('count'))
+                    .filter(SectionDictionary.section_id.in_(user_leitner_section_ids))
+                    .group_by(SectionDictionary.dictionary_id)
+                    .having(func.count(SectionDictionary.dictionary_id) > 1)
+                    .all()
+                )
+                exclude_dictionary_ids = list(map(lambda x: x[0], exclude_dictionary_ids))
+
+                # Get my section dictionaries exclude those which is used by other courses
+                user_section_dictionaries = session.query(SectionDictionary.dictionary_id).filter(
+                    SectionDictionary.section_id == section_id,
+                    ~SectionDictionary.dictionary_id.in_(exclude_dictionary_ids)
+                ).all()
+                user_section_dictionaries = list(map(lambda x: x[0], user_section_dictionaries))
+
+                # Remove dictionaries from user leitner
+                session.query(Leitner).filter(Leitner.dictionary_id.in_(user_section_dictionaries),
+                                              Leitner.user_id == user_id).delete()
+
+                # Remove section from user leitner setting
+                session.query(UserLeitnerSetting).filter_by(user_id=user_id, section_id=section_id).delete()
+
+                await query.edit_message_text(f"🗑️ این بخش با موفقیت حذف شد!!")
+
+            if 'active' in data:
+                active_action = data.split("_")[-1]
+                active_bool = 1 if active_action == "True" else 0
+                active_msg = "فعال" if active_bool else "غیرفعال"
+                session.query(UserLeitnerSetting).filter_by(
+                    user_id=user_id,
+                    section_id=section_id
+                ).update(
+                    {UserLeitnerSetting.active: bool(active_bool)},
+                    synchronize_session='fetch'
+                )
+                if active_bool:
+                    await query.edit_message_text(f"✅ این بخش با موفقیت {active_msg} شد!!")
+                else:
+                    await query.edit_message_text(f"❌ این بخش با موفقیت {active_msg} شد!!")
+
+            session.commit()
 
         except Exception as e:
             logger.error(e)
