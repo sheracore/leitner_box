@@ -1,12 +1,12 @@
 import os
 import csv
 import logging
+import sqlalchemy
 
 from enum import Enum
-from sqlalchemy import asc
-from sqlalchemy import func
+from sqlalchemy import asc, func
+from sqlalchemy.orm import joinedload
 
-from telegram_bot import Dictionary
 from telegram_bot.utils import save_file, remove_file
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler, CallbackContext
@@ -15,6 +15,8 @@ from telegram_bot.core.db import Database
 from telegram_bot.models import (Course,
                                  Section,
                                  LanguageChoice,
+                                 Dictionary,
+                                 DictionaryExample,
                                  SectionDictionary,
                                  User,
                                  Leitner,
@@ -80,9 +82,9 @@ class LeitnerHandler:
 
             inline_keyboard = [
                 [
-                    InlineKeyboardButton("مرور لایتنر امروز", callback_data="my_leitner"),
-                    InlineKeyboardButton("همه دوره ها", callback_data="courses"),
                     InlineKeyboardButton("مدیریت لایتنر من", callback_data="user_leitner_setting"),
+                    InlineKeyboardButton("همه دوره ها", callback_data="courses"),
+                    InlineKeyboardButton("مرور لایتنر امروز", callback_data="leitner_review"),
                 ]
             ]
             message = (
@@ -205,7 +207,7 @@ class LeitnerHandler:
             db = Database.get_db()
             session = next(db)
             state_counts = session.query(Leitner.state, func.count(Leitner.id).label('count')).group_by(
-                Leitner.state).filter_by(user_id=user_id).all()
+                Leitner.state).filter_by(user_id=user_id).order_by(Leitner.state).all()
 
             state_msg = self._calculate_state_percentate(state_counts)
             state_msg += self._calculate_boxes_status()
@@ -330,6 +332,75 @@ class LeitnerHandler:
         translated_box_msg = '\n'.join([f"✔️ {translated}" for _, translated in leitner_box_translator.items()])
         return f"📊وضعیت لایتنر شما در {len(leitner_box_translator)} جعبه در حالت های زیر مدیریت می شود: \n{translated_box_msg} \n📌که وضعیت فعلی شما بصورت زیر می باشد:"
 
+    async def leitner_review(self, update: Update, context: CallbackContext) -> int:
+        query = update.callback_query
+        await query.answer()
+        user_id = str(query.from_user.id)
+        try:
+            db = Database.get_db()
+            session = next(db)
+
+            if 'user_leitners' not in context.user_data:
+                # First call: Fetch Leitner entries due for review
+                user_leitners = session.query(Leitner).filter(
+                    Leitner.user_id == user_id,
+                    Leitner.review_datetime <= sqlalchemy.func.now()
+                ).options(
+                    joinedload(Leitner.dictionary).joinedload(Dictionary.examples)
+                ).all()
+
+                if not user_leitners:
+                    await query.message.reply_text("لطفا ابتدا از بخش دوره ها یک دوره را به لایتنرتان اضافه کنید!")
+                    return ConversationHandler.END
+
+                current_index = 0
+                context.user_data['user_leitners'] = user_leitners
+                context.user_data['leitner_index'] = current_index
+                current_leitner = user_leitners[0]
+            else:
+                # User has responded to the previous entry
+                current_index = context.user_data['leitner_index']
+                user_leitners = context.user_data['user_leitners']
+
+                if current_index >= len(user_leitners):
+                    await query.edit_message_text("مرور لایتنر به پایان رسید!")
+                    context.user_data.pop('user_leitners', None)
+                    context.user_data.pop('leitner_index', None)
+                    return ConversationHandler.END
+
+                current_leitner = user_leitners[current_index]
+
+
+            # Display the current Leitner entry
+            dictionary = current_leitner.dictionary
+            examples = [example.example for example in dictionary.examples]
+            examples_text = "\n".join([f"- {ex}" for ex in examples]) if examples else "بدون مثال"
+            keyboard = [
+                [
+                    InlineKeyboardButton("می‌دانم ✅", callback_data="leitner_action_know"),
+                    InlineKeyboardButton("نمی‌دانم ❌", callback_data="leitner_action_dont_know")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            message_text = (
+                f"واژه: {dictionary.word}\n"
+                f"معنی: {dictionary.meaning}\n"
+                f"مثال‌ها:\n{examples_text}\n\n"
+                f"وضعیت: {current_leitner.state.value}"
+            )
+            context.user_data['leitner_index'] += 1
+
+            await query.edit_message_text(message_text, reply_markup=reply_markup)
+
+            return ConversationState.LEITNER_REVIEW.value
+
+        except Exception as e:
+            logger.error(e)
+            await query.edit_message_text(
+                f"خطایی رخ داده لطفا دوباره تلاش کنید و درصورت نیاز به ادمین اطلاع بدهید: {e}")
+            return ConversationHandler.END
+
     async def admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         user_id = update.effective_user.id
         if str(user_id) not in Config.ADMIN_IDS:
@@ -395,7 +466,7 @@ class LeitnerHandler:
                 resize_keyboard=True)
 
             await update.message.reply_text(
-                "یک بخش جدید وارد کنید یا بین یخش های زیر یک بخش را برای ادیت کردن آن انتخاب کنید",
+                "یک بخش جدید وارد کنید یا بین یخش های زیر یک بخش را برای ویرایش کردن آن انتخاب کنید",
                 reply_markup=reply_markup)
 
             return ConversationState.ADD_SECTION.value
@@ -458,14 +529,14 @@ class LeitnerHandler:
             # Update the Section with the file path
             section = session.query(Section).filter(Section.id == section_obj.id).first()
             if not section:
-                await update.message.reply_text("Section not found.")
+                await update.message.reply_text("بخش مورد نظر پیدا نشد!!")
                 return ConversationHandler.END
 
             remove_file(section.dictionary_file_path)
             section.dictionary_file_path = file_path
             session.commit()
             await self._parse_dictionary_file(session, file_path, section_obj)
-            await update.message.reply_text(f" ✅فایل{section.name} با موقعیت آپلود و پارس شد: !")
+            await update.message.reply_text(f" ✅فایل{section.name} با موفقیت آپلود و پارس شد: !")
 
             return ConversationHandler.END
 
@@ -485,19 +556,37 @@ class LeitnerHandler:
                     try:
                         word = row[0]
                         meaning = row[1]
-                        # TODO: add examples
+                        examples_list = row[2].split(',') if row[2] else []
 
                         dictionary_obj = session.query(Dictionary).filter_by(word=word,
                                                                              language=LanguageChoice.EN).first()
+
+                        # Add dictionary
                         if not dictionary_obj:
                             dictionary_obj = Dictionary(word=word, meaning=meaning, language=LanguageChoice.EN)
                             session.add(dictionary_obj)
                             session.commit()
+                        else:
+                            session.query(Dictionary).filter_by(word=word).update(
+                                {Dictionary.meaning: meaning},
+                                synchronize_session='fetch')
+                            session.commit()
 
+                        # Add examples
+                        for example in examples_list:
+                            example_striped = example.strip()
+                            if not session.query(DictionaryExample).filter_by(example=example_striped,
+                                                                              dictionary_id=dictionary_obj.id).first():
+                                example_obj = DictionaryExample(example=example_striped, dictionary_id=dictionary_obj.id)
+                                session.add(example_obj)
+                                session.commit()
+
+                        # Connect Dictionaries to their sections in SectionDictionary model
                         if not session.query(SectionDictionary).filter_by(section_id=section_obj.id,
                                                                           dictionary_id=dictionary_obj.id).first():
                             session.add(SectionDictionary(section_id=section_obj.id, dictionary_id=dictionary_obj.id))
                             session.commit()
+
                     except Exception as e:
                         logger.error(f"Unsuccessful adding dictionary: {row[0]} with error: {str(e)}")
 

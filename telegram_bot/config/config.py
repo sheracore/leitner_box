@@ -24,6 +24,7 @@ class ConversationState(Enum):
     COURSE = auto()
     UPDATE_LEITNER = auto()
     USER_LEITNER_SETTING = auto()
+    LEITNER_REVIEW = auto()
 
     CHOOSE_COURSE = auto()
     BLOCKCHAIN_URL = auto()

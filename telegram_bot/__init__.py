@@ -1,6 +1,7 @@
 from .models import (Section,
                      Course,
                      Dictionary,
+                     DictionaryExample,
                      SectionDictionary,
                      Leitner,
                      StateEnum,

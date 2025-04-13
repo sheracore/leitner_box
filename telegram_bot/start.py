@@ -35,7 +35,9 @@ def leitner_conversation(leitner_handler: LeitnerHandler):
 
             ConversationState.START_SECTIONS.value: [
                 CallbackQueryHandler(leitner_handler.courses, pattern='^courses'),
-                CallbackQueryHandler(leitner_handler.user_leitner_setting, pattern='^user_leitner_setting')],
+                CallbackQueryHandler(leitner_handler.user_leitner_setting, pattern='^user_leitner_setting'),
+                CallbackQueryHandler(leitner_handler.leitner_review, pattern='^leitner_review')
+            ],
 
             ConversationState.COURSE.value: [
                 CallbackQueryHandler(leitner_handler.course, pattern='^course_')],
@@ -46,6 +48,9 @@ def leitner_conversation(leitner_handler: LeitnerHandler):
 
             ConversationState.USER_LEITNER_SETTING.value: [
                 CallbackQueryHandler(leitner_handler.user_leitner_setting_action, pattern='^leitner_setting')],
+
+            ConversationState.LEITNER_REVIEW.value: [
+                CallbackQueryHandler(leitner_handler.leitner_review, pattern='^leitner_action')],
 
         },
         fallbacks=[CommandHandler('close', leitner_handler.close)],
